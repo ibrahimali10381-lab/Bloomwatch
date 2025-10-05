@@ -25,20 +25,25 @@ ee.Initialize(credentials)
 countries_fc = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
 all_countries = sorted(countries_fc.aggregate_array('country_na').getInfo())
 
+def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bloom=True,
+                           proj_scale=500, zoom_start=3, center=[20,0], use_reduce_resolution=False):
 
     try:
-        # Example: get NDVI images for selected years
+        # Convert selected_years to integers
+        selected_years = [int(y) for y in selected_years]
+
+        # NDVI images
         ndvi_current = ee.ImageCollection('MODIS/006/MOD13Q1') \
             .filter(ee.Filter.calendarRange(selected_years[-1], selected_years[-1], 'year')) \
             .select('NDVI').mean()
         ndvi_prev = ee.ImageCollection('MODIS/006/MOD13Q1') \
-            .filter(ee.Filter.calendarRange(selected_years[0], selected_years[0], 'year')) \
+            .filter(ee.Filter.calendarRange(selected_years[0]-1, selected_years[0]-1, 'year')) \
             .select('NDVI').mean()
         ndvi_image = ndvi_current
 
+        # Bloom difference
         bloom_diff = ndvi_current.subtract(ndvi_prev).setDefaultProjection(crs='EPSG:4326', scale=proj_scale)
 
-        # Generate bloom mask
         if use_reduce_resolution:
             bloom_mask = bloom_diff.updateMask(bloom_diff.gt(50)) \
                 .reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024) \
@@ -57,10 +62,8 @@ all_countries = sorted(countries_fc.aggregate_array('country_na').getInfo())
             'palette': ['#ffb6c1', '#ff69b4', '#ff00ff', '#800080']
         }
 
-        # Initialize map
         m = folium.Map(location=center, zoom_start=zoom_start, tiles='OpenStreetMap', control_scale=True)
 
-        # Add NDVI layer
         if show_ndvi:
             ndvi_mapid = ndvi_image.getMapId(ndvi_vis)
             folium.TileLayer(
@@ -71,7 +74,6 @@ all_countries = sorted(countries_fc.aggregate_array('country_na').getInfo())
                 control=True
             ).add_to(m)
 
-        # Add Bloom layer
         if show_bloom:
             bloom_mapid = bloom_mask.getMapId(bloom_vis)
             folium.TileLayer(
@@ -82,21 +84,18 @@ all_countries = sorted(countries_fc.aggregate_array('country_na').getInfo())
                 control=True
             ).add_to(m)
 
-        # Country borders
         if country_name == "World":
-            # Use getMapId with attribution
             world_mapid = countries_fc.getMapId({'color': 'red'})
             folium.TileLayer(
-            tiles=world_mapid['tile_fetcher'].url_format,
-            attr='Earth Engine / Country Borders',  # <-- mandatory
-            name='Countries',
-            overlay=True,
-            control=True
-        ).add_to(m)
+                tiles=world_mapid['tile_fetcher'].url_format,
+                attr='Earth Engine / Country Borders',  # mandatory
+                name='Countries',
+                overlay=True,
+                control=True
+            ).add_to(m)
         else:
-            # Filter specific country
-            country_fc = countries_fc.filter(ee.Filter.eq('name', country_name))
-            country_mapid = country_fc.getMapId()
+            country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
+            country_mapid = country_fc.getMapId({'color': 'red'})
             folium.TileLayer(
                 tiles=country_mapid['tile_fetcher'].url_format,
                 attr=f'{country_name} Borders',
@@ -105,12 +104,10 @@ all_countries = sorted(countries_fc.aggregate_array('country_na').getInfo())
                 control=True
             ).add_to(m)
 
-            # Fit bounds to country geometry
             geometry = country_fc.geometry()
             bounds = geometry.bounds().getInfo()['coordinates'][0]
             m.fit_bounds([[b[1], b[0]] for b in bounds])
 
-        # Add controls
         Fullscreen().add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
 
@@ -118,6 +115,7 @@ all_countries = sorted(countries_fc.aggregate_array('country_na').getInfo())
 
     except Exception as e:
         return f"<h3>Error generating map for {country_name}: {str(e)}</h3>"
+
 
 
 app = Flask(__name__)
