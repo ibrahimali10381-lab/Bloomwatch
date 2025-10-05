@@ -31,7 +31,6 @@ html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; overflow: 
 .select2-container--default .select2-selection--multiple { background-color: rgba(255,255,255,0.9); color: black; border-radius: 4px; }
 #timeseries-container { position: absolute; bottom: 20px; left: 20px; background: rgba(255,255,255,0.95); z-index: 10000; border-radius: 8px; padding: 15px; box-shadow: 0 0 12px rgba(0,0,0,0.25); min-width: 380px; }
 #timeseries-container img { max-width: 350px; }
-#bloom-timeseries-container { display: none; }
 #graph-select { width: 180px; margin-bottom: 10px; }
 </style>
 
@@ -91,7 +90,11 @@ html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; overflow: 
     {% endif %}
 </div>
 
-{% if timeseries_url or bloom_timeseries_url %}
+{% if selected_country == "World" %}
+<div id="timeseries-container">
+    <div style="color:red;">NDVI/Bloom time series is only available for individual countries.</div>
+</div>
+{% elif timeseries_url or bloom_timeseries_url %}
 <div id="timeseries-container">
     <select id="graph-select">
         <option value="ndvi" selected>NDVI Time Series</option>
