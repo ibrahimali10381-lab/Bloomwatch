@@ -1,5 +1,4 @@
 import os
-import json
 import ee
 import tempfile
 import folium
@@ -11,7 +10,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 
 # -----------------------------
-# Earth Engine Initialization (Fixed)
+# Earth Engine Initialization (env variable key)
 # -----------------------------
 SERVICE_ACCOUNT = "earth-engine-user@bloomwatch-474023.iam.gserviceaccount.com"
 KEY_JSON = os.environ.get("EE_KEY_JSON")
@@ -234,6 +233,65 @@ def generate_ndvi_timeseries(country_name, year):
         return None
 
 # -----------------------------
+# Bloom Time-Series Function
+# -----------------------------
+def generate_bloom_timeseries(country_name, year):
+    try:
+        if country_name == "World":
+            geometry = ee.Geometry.Polygon([[-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]])
+        else:
+            country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
+            geometry = country_fc.geometry()
+
+        col = ee.ImageCollection("MODIS/061/MOD13Q1") \
+            .filterBounds(geometry) \
+            .filterDate(f'{year}-01-01', f'{year}-12-31') \
+            .select('NDVI') \
+            .sort('system:time_start')
+
+        def compute_bloom(img):
+            date = img.date()
+            prev = ee.ImageCollection("MODIS/061/MOD13Q1") \
+                .filterDate(date.advance(-16, 'day').format('YYYY-MM-dd'), date.advance(-1, 'day').format('YYYY-MM-dd')) \
+                .select('NDVI') \
+                .mean()
+            bloom = img.subtract(prev)
+            mean_dict = bloom.reduceRegion(
+                reducer=ee.Reducer.mean(),
+                geometry=geometry,
+                scale=500,
+                maxPixels=1e13
+            )
+            return ee.Feature(None, {
+                'date': date.format('YYYY-MM-dd'),
+                'Bloom': mean_dict.get('NDVI')
+            })
+
+        features = col.map(compute_bloom).filter(ee.Filter.notNull(['Bloom'])).getInfo()['features']
+        dates = [datetime.strptime(f['properties']['date'], '%Y-%m-%d') for f in features]
+        bloom_values = [f['properties']['Bloom'] / 10000.0 if f['properties']['Bloom'] is not None else None for f in features]
+
+        plt.figure(figsize=(12, 5))
+        plt.plot(dates, bloom_values, marker='o', linestyle='-', color='purple')
+        plt.title(f"Bloom Time Series for {country_name} ({year})")
+        plt.xlabel("Date")
+        plt.ylabel("Bloom (NDVI difference)")
+        plt.grid(True)
+        plt.tight_layout()
+
+        output_dir = os.path.join('static', 'charts')
+        os.makedirs(output_dir, exist_ok=True)
+        filename = f"bloom_timeseries_{country_name}_{year}.png".replace(" ", "_")
+        filepath = os.path.join(output_dir, filename)
+        plt.savefig(filepath)
+        plt.close()
+        return f"/static/charts/{filename}"
+
+    except Exception as e:
+        print(f"Error generating bloom time-series: {e}")
+        return None
+
+# -----------------------------
 # Flask App
 # -----------------------------
 app = Flask(__name__)
@@ -244,6 +302,7 @@ def index():
     selected_years = request.form.getlist('year')
     show_ndvi = 'show_ndvi' in request.form
     show_bloom = 'show_bloom' in request.form
+    show_bloom_graph = 'show_bloom_graph' in request.form
 
     selected_years = [y for y in selected_years if str(y).isdigit()]
     if not selected_years:
@@ -257,6 +316,7 @@ def index():
         ndvi_map = f"<h3>Error generating map: {str(e)}</h3>"
 
     timeseries_url = generate_ndvi_timeseries(selected_country, selected_years[0]) if selected_years else None
+    bloom_timeseries_url = generate_bloom_timeseries(selected_country, selected_years[0]) if (show_bloom_graph and selected_years) else None
 
     return render_template(
         'index.html',
@@ -267,7 +327,9 @@ def index():
         years=years,
         show_ndvi=show_ndvi,
         show_bloom=show_bloom,
-        timeseries_url=timeseries_url
+        timeseries_url=timeseries_url,
+        show_bloom_graph=show_bloom_graph,
+        bloom_timeseries_url=bloom_timeseries_url
     )
 
 if __name__ == "__main__":
