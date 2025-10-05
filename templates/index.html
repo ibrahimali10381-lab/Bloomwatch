@@ -29,10 +29,10 @@ html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; overflow: 
 @keyframes spin { 100% { transform: rotate(360deg); } }
 .select2-container--default .select2-selection--single,
 .select2-container--default .select2-selection--multiple { background-color: rgba(255,255,255,0.9); color: black; border-radius: 4px; }
-#timeseries-container { position: absolute; bottom: 20px; left: 20px; background: rgba(255,255,255,0.95); z-index: 10000; border-radius: 8px; padding: 15px; box-shadow: 0 0 12px rgba(0,0,0,0.25); }
+#timeseries-container { position: absolute; bottom: 20px; left: 20px; background: rgba(255,255,255,0.95); z-index: 10000; border-radius: 8px; padding: 15px; box-shadow: 0 0 12px rgba(0,0,0,0.25); min-width: 380px; }
 #timeseries-container img { max-width: 350px; }
-#bloom-timeseries-container { position: absolute; bottom: 20px; left: 410px; background: rgba(255,255,255,0.95); z-index: 10001; border-radius: 8px; padding: 15px; box-shadow: 0 0 12px rgba(0,0,0,0.25); }
-#bloom-timeseries-container img { max-width: 350px; }
+#bloom-timeseries-container { display: none; }
+#graph-select { width: 180px; margin-bottom: 10px; }
 </style>
 
 <div id="particles-js"></div>
@@ -91,17 +91,24 @@ html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; overflow: 
     {% endif %}
 </div>
 
-{% if timeseries_url %}
+{% if timeseries_url or bloom_timeseries_url %}
 <div id="timeseries-container">
-    <b>NDVI Time Series</b><br>
-    <img src="{{ timeseries_url }}" alt="NDVI Time Series">
-</div>
-{% endif %}
-
-{% if bloom_timeseries_url %}
-<div id="bloom-timeseries-container">
-    <b>Bloom Time Series</b><br>
-    <img src="{{ bloom_timeseries_url }}" alt="Bloom Time Series">
+    <select id="graph-select">
+        <option value="ndvi" selected>NDVI Time Series</option>
+        {% if bloom_timeseries_url %}
+        <option value="bloom">Bloom Time Series</option>
+        {% endif %}
+    </select>
+    <div id="ndvi-timeseries-graph" style="display:block;">
+        {% if timeseries_url %}
+        <img src="{{ timeseries_url }}" alt="NDVI Time Series">
+        {% endif %}
+    </div>
+    <div id="bloom-timeseries-graph" style="display:none;">
+        {% if bloom_timeseries_url %}
+        <img src="{{ bloom_timeseries_url }}" alt="Bloom Time Series">
+        {% endif %}
+    </div>
 </div>
 {% endif %}
 
@@ -126,6 +133,18 @@ $(document).ready(function() {
     function resizeMap() { $('#map').height($(window).height()); }
     $(window).resize(resizeMap);
     resizeMap();
+
+    // Dropdown logic for NDVI/Bloom graph
+    $('#graph-select').on('change', function() {
+        const val = $(this).val();
+        if(val === "ndvi") {
+            $('#ndvi-timeseries-graph').show();
+            $('#bloom-timeseries-graph').hide();
+        } else if(val === "bloom") {
+            $('#ndvi-timeseries-graph').hide();
+            $('#bloom-timeseries-graph').show();
+        }
+    });
 
     particlesJS("particles-js", {
         "particles": {
