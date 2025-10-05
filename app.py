@@ -13,6 +13,7 @@ from datetime import datetime
 # Earth Engine Initialization (env variable key)
 # -----------------------------
 SERVICE_ACCOUNT = "earth-engine-user@bloomwatch-474023.iam.gserviceaccount.com"
+
 KEY_JSON = os.environ.get("EE_KEY_JSON")
 if not KEY_JSON:
     raise ValueError("EE_KEY_JSON environment variable is not set.")
@@ -50,31 +51,36 @@ def get_ndvi_and_bloom_map(
             selected_years = [2023]
         last_year = int(selected_years[-1])
 
-        country_geom = None if country_name == "World" else countries_fc.filter(ee.Filter.eq('country_na', country_name)).geometry()
-        country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name)) if country_name != "World" else None
+        country_geom = None if country_name == "World" else countries_fc.filter(
+            ee.Filter.eq('country_na', country_name)
+        ).geometry()
 
+        country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name)) if country_name != "World" else None
 
         # --- MODIS NDVI (existing) ---
         ndvi_collection = ee.ImageCollection('MODIS/006/MOD13Q1') \
             .filter(ee.Filter.calendarRange(last_year, last_year, 'year')) \
             .select('NDVI')
+
         ndvi_prev_collection = ee.ImageCollection('MODIS/006/MOD13Q1') \
-            .filter(ee.Filter.calendarRange(last_year-1, last_year-1, 'year')) \
+            .filter(ee.Filter.calendarRange(last_year - 1, last_year - 1, 'year')) \
             .select('NDVI')
 
         ndvi_current = ndvi_collection.mean()
         ndvi_prev = ndvi_prev_collection.mean()
+
         if country_geom:
             ndvi_current = ndvi_current.clip(country_geom)
             ndvi_prev = ndvi_prev.clip(country_geom)
 
-        modis_bloom_diff = ndvi_current.subtract(ndvi_prev).clip(country_geom)
+        modis_bloom_diff = ndvi_current.subtract(ndvi_prev).setDefaultProjection(crs='EPSG:4326', scale=proj_scale)
         if country_geom:
             modis_bloom_diff = modis_bloom_diff.clip(country_geom)
+
         if use_reduce_resolution:
             modis_bloom_mask = modis_bloom_diff.updateMask(modis_bloom_diff.gt(50)) \
                 .reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024) \
-                #.reproject(crs='EPSG:4326', scale=proj_scale)
+                .reproject(crs='EPSG:4326', scale=proj_scale)
         else:
             modis_bloom_mask = modis_bloom_diff.updateMask(modis_bloom_diff.gt(50))
 
@@ -83,8 +89,9 @@ def get_ndvi_and_bloom_map(
             .filter(ee.Filter.calendarRange(last_year, last_year, 'year')) \
             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
             .select(['B4', 'B8'])  # Red and NIR
+
         sentinel_prev_col = ee.ImageCollection('COPERNICUS/S2_SR') \
-            .filter(ee.Filter.calendarRange(last_year-1, last_year-1, 'year')) \
+            .filter(ee.Filter.calendarRange(last_year - 1, last_year - 1, 'year')) \
             .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20)) \
             .select(['B4', 'B8'])
 
@@ -100,14 +107,15 @@ def get_ndvi_and_bloom_map(
             sentinel_prev_ndvi = sentinel_prev_ndvi.clip(country_geom)
 
         sentinel_bloom_diff = sentinel_ndvi.subtract(sentinel_prev_ndvi)
+
         if use_reduce_resolution:
             sentinel_bloom_mask = sentinel_bloom_diff.updateMask(sentinel_bloom_diff.gt(0.1)) \
                 .reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024) \
-                #.reproject(crs='EPSG:4326', scale=proj_scale)
+                .reproject(crs='EPSG:4326', scale=proj_scale)
         else:
             sentinel_bloom_mask = sentinel_bloom_diff.updateMask(sentinel_bloom_diff.gt(0.1))
 
-        # --- Optionally, overlap MODIS bloom and Sentinel bloom ---
+        # --- Overlap MODIS and Sentinel bloom ---
         overlap_bloom = modis_bloom_mask.updateMask(sentinel_bloom_mask)
 
         # --- Visualization parameters ---
@@ -116,7 +124,7 @@ def get_ndvi_and_bloom_map(
         sentinel_bloom_vis = {'min': 0.1, 'max': 1, 'palette': ['#800080', '#da70d6', '#ee82ee']}
 
         # --- Folium Map ---
-        m = folium.Map(location=center, zoom_start=zoom_start, control_scale=True, prefer_canvas=True, crs='EPSG3857')
+        m = folium.Map(location=center, zoom_start=zoom_start, tiles=None, control_scale=True)
         folium.TileLayer(
             tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
             attr="&copy; OpenStreetMap contributors &copy; CARTO",
@@ -157,9 +165,7 @@ def get_ndvi_and_bloom_map(
 
         # --- Country border and zoom ---
         if country_name != "World" and country_geom:
-            styled_country = country_fc.style(
-                color='red', width=3, fillColor='00000000'
-            )
+            styled_country = country_fc.style(color='red', width=3, fillColor='00000000')
             country_mapid = styled_country.getMapId({})
             folium.TileLayer(
                 tiles=country_mapid['tile_fetcher'].url_format,
@@ -174,10 +180,12 @@ def get_ndvi_and_bloom_map(
 
         Fullscreen().add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
+
         return m.get_root().render()
 
     except Exception as e:
         return f"<h3>Error generating map for {country_name}: {str(e)}</h3>"
+
 
 # -----------------------------
 # NDVI Time-Series Function
@@ -185,7 +193,9 @@ def get_ndvi_and_bloom_map(
 def generate_ndvi_timeseries(country_name, year):
     try:
         if country_name == "World":
-            geometry = ee.Geometry.Polygon([[-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]])
+            geometry = ee.Geometry.Polygon([
+                [-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]
+            ])
         else:
             country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
             geometry = country_fc.geometry()
@@ -209,6 +219,7 @@ def generate_ndvi_timeseries(country_name, year):
             })
 
         features = col.map(compute_mean).filter(ee.Filter.notNull(['NDVI'])).getInfo()['features']
+
         dates = [datetime.strptime(f['properties']['date'], '%Y-%m-%d') for f in features]
         ndvi_values = [f['properties']['NDVI'] / 10000.0 for f in features]
 
@@ -223,15 +234,19 @@ def generate_ndvi_timeseries(country_name, year):
 
         output_dir = os.path.join('static', 'charts')
         os.makedirs(output_dir, exist_ok=True)
+
         filename = f"ndvi_timeseries_{country_name}_{year}.png".replace(" ", "_")
         filepath = os.path.join(output_dir, filename)
+
         plt.savefig(filepath)
         plt.close()
+
         return f"/static/charts/{filename}"
 
     except Exception as e:
         print(f"Error generating time-series: {e}")
         return None
+
 
 # -----------------------------
 # Bloom Time-Series Function
@@ -239,7 +254,9 @@ def generate_ndvi_timeseries(country_name, year):
 def generate_bloom_timeseries(country_name, year):
     try:
         if country_name == "World":
-            geometry = ee.Geometry.Polygon([[-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]])
+            geometry = ee.Geometry.Polygon([
+                [-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]
+            ])
         else:
             country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
             geometry = country_fc.geometry()
@@ -253,7 +270,8 @@ def generate_bloom_timeseries(country_name, year):
         def compute_bloom(img):
             date = img.date()
             prev = ee.ImageCollection("MODIS/061/MOD13Q1") \
-                .filterDate(date.advance(-16, 'day').format('YYYY-MM-dd'), date.advance(-1, 'day').format('YYYY-MM-dd')) \
+                .filterDate(date.advance(-16, 'day').format('YYYY-MM-dd'),
+                            date.advance(-1, 'day').format('YYYY-MM-dd')) \
                 .select('NDVI') \
                 .mean()
             bloom = img.subtract(prev)
@@ -269,8 +287,12 @@ def generate_bloom_timeseries(country_name, year):
             })
 
         features = col.map(compute_bloom).filter(ee.Filter.notNull(['Bloom'])).getInfo()['features']
+
         dates = [datetime.strptime(f['properties']['date'], '%Y-%m-%d') for f in features]
-        bloom_values = [f['properties']['Bloom'] / 10000.0 if f['properties']['Bloom'] is not None else None for f in features]
+        bloom_values = [
+            f['properties']['Bloom'] / 10000.0 if f['properties']['Bloom'] is not None else None
+            for f in features
+        ]
 
         plt.figure(figsize=(12, 5))
         plt.plot(dates, bloom_values, marker='o', linestyle='-', color='purple')
@@ -282,15 +304,19 @@ def generate_bloom_timeseries(country_name, year):
 
         output_dir = os.path.join('static', 'charts')
         os.makedirs(output_dir, exist_ok=True)
+
         filename = f"bloom_timeseries_{country_name}_{year}.png".replace(" ", "_")
         filepath = os.path.join(output_dir, filename)
+
         plt.savefig(filepath)
         plt.close()
+
         return f"/static/charts/{filename}"
 
     except Exception as e:
         print(f"Error generating bloom time-series: {e}")
         return None
+
 
 # -----------------------------
 # Flask App
@@ -308,7 +334,6 @@ def index():
     selected_years = [y for y in selected_years if str(y).isdigit()]
     if not selected_years:
         selected_years = [2023]
-
     years = list(range(2005, 2024))
 
     try:
@@ -332,6 +357,7 @@ def index():
         show_bloom_graph=show_bloom_graph,
         bloom_timeseries_url=bloom_timeseries_url
     )
+
 
 if __name__ == "__main__":
     app.run(debug=True)
