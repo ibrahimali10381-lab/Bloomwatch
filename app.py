@@ -26,6 +26,11 @@ ee.Initialize(credentials)
 countries_fc = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
 all_countries = ["World"] + sorted(countries_fc.aggregate_array('country_na').getInfo())
 
+def get_land_mask():
+    # MODIS land mask: 1=land, 0=water
+    land_mask = ee.Image("MODIS/051/MOD44W/MOD44W_005_2000_02_24").select('water_mask').unmask(0).eq(1)
+    return land_mask
+
 def get_ndvi_and_bloom_map(
     country_name,
     selected_years,
@@ -64,10 +69,17 @@ def get_ndvi_and_bloom_map(
         if country_geom is not None:
             ndvi_current = ndvi_current.clip(country_geom)
             ndvi_prev = ndvi_prev.clip(country_geom)
+        else:
+            # Mask to land only for "World"
+            land_mask = get_land_mask()
+            ndvi_current = ndvi_current.updateMask(land_mask)
+            ndvi_prev = ndvi_prev.updateMask(land_mask)
 
         modis_bloom_diff = ndvi_current.subtract(ndvi_prev).setDefaultProjection(crs='EPSG:4326', scale=proj_scale)
         if country_geom is not None:
             modis_bloom_diff = modis_bloom_diff.clip(country_geom)
+        else:
+            modis_bloom_diff = modis_bloom_diff.updateMask(get_land_mask())
 
         if use_reduce_resolution:
             modis_bloom_mask = modis_bloom_diff.updateMask(modis_bloom_diff.gt(50)) \
@@ -135,12 +147,11 @@ def get_ndvi_and_bloom_map(
     except Exception as e:
         return f"<h3>Error generating map for {country_name}: {str(e)}</h3>"
 
-# Efficient Monthly NDVI/Bloom Time-Series Function
 def generate_monthly_timeseries(country_name, year, kind="NDVI"):
     try:
+        land_mask = get_land_mask()
         if country_name == "World":
-            # Don't plot a graph for World, return None
-            return None
+            geometry = ee.Geometry.Polygon([[-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]])
         else:
             country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
             geometry = country_fc.geometry()
@@ -157,6 +168,9 @@ def generate_monthly_timeseries(country_name, year, kind="NDVI"):
                 .filterDate(start.advance(-1, 'month'), start) \
                 .select('NDVI') \
                 .mean()
+            if country_name == "World":
+                img = img.updateMask(land_mask)
+                prev_img = prev_img.updateMask(land_mask)
             if kind == "NDVI":
                 val = img.reduceRegion(ee.Reducer.mean(), geometry, 1000, maxPixels=1e13).get('NDVI')
             else:
@@ -213,11 +227,10 @@ def index():
     except Exception as e:
         ndvi_map = f"<h3>Error generating map: {str(e)}</h3>"
 
-    # Only show time series for countries, not for "World"
     timeseries_url = generate_monthly_timeseries(selected_country, int(selected_years[0]), kind="NDVI") \
-        if selected_country != "World" and selected_years else None
+        if selected_years else None
     bloom_timeseries_url = generate_monthly_timeseries(selected_country, int(selected_years[0]), kind="Bloom") \
-        if (show_bloom_graph and selected_country != "World" and selected_years) else None
+        if (show_bloom_graph and selected_years) else None
 
     return render_template(
         'index.html',
