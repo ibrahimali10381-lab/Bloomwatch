@@ -27,8 +27,8 @@ countries_fc = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
 all_countries = ["World"] + sorted(countries_fc.aggregate_array('country_na').getInfo())
 
 def get_land_mask():
-    # MODIS land mask: 1=land, 0=water
-    land_mask = ee.Image("MODIS/051/MOD44W/MOD44W_005_2000_02_24").select('water_mask').unmask(0).eq(1)
+    mask_img = ee.Image('MODIS/006/MOD44W/2015_01_01').select('water_mask')
+    land_mask = mask_img.unmask(0).eq(1)
     return land_mask
 
 def get_ndvi_and_bloom_map(
