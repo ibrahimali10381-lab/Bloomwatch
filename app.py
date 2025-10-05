@@ -95,12 +95,13 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
             world_mapid = countries_fc.getMapId({'color': 'red'})
             folium.TileLayer(
                 tiles=world_mapid['tile_fetcher'].url_format,
-                attr='Earth Engine / Country Borders',  # mandatory
+                attr='Earth Engine / Country Borders',
                 name='Countries',
                 overlay=True,
                 control=True
             ).add_to(m)
         else:
+            # Overlay just the selected country
             country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
             country_mapid = country_fc.getMapId({'color': 'red'})
             folium.TileLayer(
@@ -110,6 +111,10 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
                 overlay=True,
                 control=True
             ).add_to(m)
+
+    geometry = country_fc.geometry()
+    bounds = geometry.bounds().getInfo()['coordinates'][0]
+    m.fit_bounds([[b[1], b[0]] for b in bounds])
 
             geometry = country_fc.geometry()
             bounds = geometry.bounds().getInfo()['coordinates'][0]
