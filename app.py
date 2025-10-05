@@ -3,6 +3,7 @@ import json
 import ee
 import tempfile
 import folium
+from folium.plugins import Fullscreen
 from flask import Flask, render_template, request, redirect, url_for, session
 
 
