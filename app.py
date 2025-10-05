@@ -1,15 +1,20 @@
 import os
+import json
 import ee
 
-SERVICE_ACCOUNT = os.environ.get("EE_SERVICE_ACCOUNT")
-KEY_JSON = os.environ.get("EE_KEY_JSON")  
+SERVICE_ACCOUNT = 'earth-engine-user@bloomwatch-474023.iam.gserviceaccount.com'
+KEY_JSON = os.environ.get('EE_KEY_JSON')  # <-- from Render env variable
 
-import tempfile, json
-key_file = tempfile.NamedTemporaryFile(delete=False, suffix=".json")
-key_file.write(KEY_JSON.encode())
-key_file.flush()
+if KEY_JSON is None:
+    raise ValueError("EE_KEY_JSON environment variable is not set.")
 
-credentials = ee.ServiceAccountCredentials(SERVICE_ACCOUNT, key_file.name)
+# Write JSON to a temporary file
+import tempfile
+with tempfile.NamedTemporaryFile(mode='w+', delete=False) as key_file:
+    key_file.write(KEY_JSON)
+    key_file_path = key_file.name
+
+credentials = ee.ServiceAccountCredentials(SERVICE_ACCOUNT, key_file_path)
 ee.Initialize(credentials)
 
 countries_fc = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
