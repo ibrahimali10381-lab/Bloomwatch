@@ -6,7 +6,6 @@ import folium
 from folium.plugins import Fullscreen
 from flask import Flask, render_template, request, redirect, url_for, session
 
-
 # Get JSON string from environment
 KEY_JSON = os.environ.get("EE_KEY_JSON")
 if not KEY_JSON:
@@ -23,21 +22,21 @@ credentials = ee.ServiceAccountCredentials(SERVICE_ACCOUNT, KEY_FILE)
 ee.Initialize(credentials)
 
 countries_fc = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
-all_countries = sorted(countries_fc.aggregate_array('country_na').getInfo())
+all_countries = ["World"] + sorted(countries_fc.aggregate_array('country_na').getInfo())
 
 def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bloom=True,
                            proj_scale=500, zoom_start=3, center=[20,0], use_reduce_resolution=False):
 
     try:
         selected_years = [int(y) for y in selected_years]
-
+        last_year = selected_years[-1]
 
         ndvi_current = ee.ImageCollection('MODIS/006/MOD13Q1') \
-            .filter(ee.Filter.calendarRange(selected_years[-1], selected_years[-1], 'year')) \
+            .filter(ee.Filter.calendarRange(last_year, last_year, 'year')) \
             .select('NDVI').mean()
 
         ndvi_prev = ee.ImageCollection('MODIS/006/MOD13Q1') \
-            .filter(ee.Filter.calendarRange(selected_years[-1]-1, selected_years[-1]-1, 'year')) \
+            .filter(ee.Filter.calendarRange(last_year-1, last_year-1, 'year')) \
             .select('NDVI').mean()
 
         # Bloom difference
@@ -64,7 +63,7 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
         m = folium.Map(location=center, zoom_start=zoom_start, tiles='OpenStreetMap', control_scale=True)
 
         if show_ndvi:
-            ndvi_mapid = ndvi_image.getMapId(ndvi_vis)
+            ndvi_mapid = ndvi_current.getMapId(ndvi_vis)
             folium.TileLayer(
                 tiles=ndvi_mapid['tile_fetcher'].url_format,
                 attr='MODIS NDVI',
