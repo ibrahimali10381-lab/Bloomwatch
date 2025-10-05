@@ -29,17 +29,15 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
                            proj_scale=500, zoom_start=3, center=[20,0], use_reduce_resolution=False):
 
     try:
-        # Convert selected_years to integers
         selected_years = [int(y) for y in selected_years]
 
-        # NDVI images
         ndvi_current = ee.ImageCollection('MODIS/006/MOD13Q1') \
             .filter(ee.Filter.calendarRange(selected_years[-1], selected_years[-1], 'year')) \
             .select('NDVI').mean()
+
         ndvi_prev = ee.ImageCollection('MODIS/006/MOD13Q1') \
-            .filter(ee.Filter.calendarRange(selected_years[0]-1, selected_years[0]-1, 'year')) \
+            .filter(ee.Filter.calendarRange(selected_years[-1]-1, selected_years[-1]-1, 'year')) \
             .select('NDVI').mean()
-        ndvi_image = ndvi_current
 
         # Bloom difference
         bloom_diff = ndvi_current.subtract(ndvi_prev).setDefaultProjection(crs='EPSG:4326', scale=proj_scale)
