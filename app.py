@@ -119,7 +119,7 @@ def get_ndvi_and_bloom_map(country_name, years, show_ndvi=True, show_bloom=True)
             ).add_to(m)
 
         if country_name == "World":
-            countries = countries_fc.getInfo()['features']
+            selected_country_fc = countries_fc.filter(ee.Filter.eq('name', selected_country))
             for country in countries:
                 if 'geometry' in country and country['geometry'] is not None:
                     folium.GeoJson(
