@@ -125,6 +125,8 @@ def index():
     show_ndvi = 'show_ndvi' in request.form
     show_bloom = 'show_bloom' in request.form
 
+    # FIX: Remove empty string years, fallback to 2023
+    selected_years = [y for y in selected_years if y != ""]
     if not selected_years:
         selected_years = ['2023']
 
