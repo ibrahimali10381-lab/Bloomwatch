@@ -90,11 +90,7 @@ html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; overflow: 
     {% endif %}
 </div>
 
-{% if selected_country == "World" %}
-<div id="timeseries-container">
-    <div style="color:red;">NDVI/Bloom time series is only available for individual countries.</div>
-</div>
-{% elif timeseries_url or bloom_timeseries_url %}
+{% if timeseries_url or bloom_timeseries_url %}
 <div id="timeseries-container">
     <select id="graph-select">
         <option value="ndvi" selected>NDVI Time Series</option>
