@@ -67,13 +67,13 @@ def get_ndvi_and_bloom_map(
             ndvi_current = ndvi_current.clip(country_geom)
             ndvi_prev = ndvi_prev.clip(country_geom)
 
-        modis_bloom_diff = ndvi_current.subtract(ndvi_prev).setDefaultProjection(crs='EPSG:4326', scale=proj_scale)
+        modis_bloom_diff = ndvi_current.subtract(ndvi_prev)
         if country_geom:
             modis_bloom_diff = modis_bloom_diff.clip(country_geom)
         if use_reduce_resolution:
             modis_bloom_mask = modis_bloom_diff.updateMask(modis_bloom_diff.gt(50)) \
                 .reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024) \
-                .reproject(crs='EPSG:4326', scale=proj_scale)
+                #.reproject(crs='EPSG:4326', scale=proj_scale)
         else:
             modis_bloom_mask = modis_bloom_diff.updateMask(modis_bloom_diff.gt(50))
 
@@ -102,7 +102,7 @@ def get_ndvi_and_bloom_map(
         if use_reduce_resolution:
             sentinel_bloom_mask = sentinel_bloom_diff.updateMask(sentinel_bloom_diff.gt(0.1)) \
                 .reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024) \
-                .reproject(crs='EPSG:4326', scale=proj_scale)
+                #.reproject(crs='EPSG:4326', scale=proj_scale)
         else:
             sentinel_bloom_mask = sentinel_bloom_diff.updateMask(sentinel_bloom_diff.gt(0.1))
 
@@ -115,7 +115,7 @@ def get_ndvi_and_bloom_map(
         sentinel_bloom_vis = {'min': 0.1, 'max': 1, 'palette': ['#800080', '#da70d6', '#ee82ee']}
 
         # --- Folium Map ---
-        m = folium.Map(location=center, zoom_start=zoom_start, tiles=None, control_scale=True)
+        m = folium.Map(location=center, zoom_start=zoom_start, control_scale=True, prefer_canvas=True, crs='EPSG3857')
         folium.TileLayer(
             tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
             attr="&copy; OpenStreetMap contributors &copy; CARTO",
