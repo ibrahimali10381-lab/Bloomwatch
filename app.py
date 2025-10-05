@@ -34,7 +34,7 @@ def get_ndvi_and_bloom_map(country_name, years, show_ndvi=True, show_bloom=True)
             geometry = ee.Geometry.Rectangle([-180, -90, 180, 90])
             center = [20, 0]
             zoom_start = 2
-            proj_scale = 10000
+            proj_scale = 20000
             country_fc = None
             use_reduce_resolution = False
         else:
