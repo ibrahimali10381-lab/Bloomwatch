@@ -31,6 +31,7 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
     try:
         selected_years = [int(y) for y in selected_years]
 
+
         ndvi_current = ee.ImageCollection('MODIS/006/MOD13Q1') \
             .filter(ee.Filter.calendarRange(selected_years[-1], selected_years[-1], 'year')) \
             .select('NDVI').mean()
