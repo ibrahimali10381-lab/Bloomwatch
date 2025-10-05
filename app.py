@@ -179,9 +179,9 @@ def get_ndvi_and_bloom_map(
         return f"<h3>Error generating map for {country_name}: {str(e)}</h3>"
 
 # -----------------------------
-# NDVI Time-Series Function
+# Efficient Monthly NDVI/Bloom Time-Series Function
 # -----------------------------
-def generate_ndvi_timeseries(country_name, year):
+def generate_monthly_timeseries(country_name, year, kind="NDVI"):
     try:
         if country_name == "World":
             geometry = ee.Geometry.Polygon([[-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]])
@@ -189,106 +189,48 @@ def generate_ndvi_timeseries(country_name, year):
             country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
             geometry = country_fc.geometry()
 
-        col = ee.ImageCollection("MODIS/061/MOD13Q1") \
-            .filterBounds(geometry) \
-            .filterDate(f'{year}-01-01', f'{year}-12-31') \
-            .select('NDVI') \
-            .sort('system:time_start')
-
-        def compute_mean(img):
-            mean_dict = img.reduceRegion(
-                reducer=ee.Reducer.mean(),
-                geometry=geometry,
-                scale=500,
-                maxPixels=1e13
-            )
-            return ee.Feature(None, {
-                'date': img.date().format('YYYY-MM-dd'),
-                'NDVI': mean_dict.get('NDVI')
-            })
-
-        features = col.map(compute_mean).filter(ee.Filter.notNull(['NDVI'])).getInfo()['features']
-        dates = [datetime.strptime(f['properties']['date'], '%Y-%m-%d') for f in features]
-        ndvi_values = [f['properties']['NDVI'] / 10000.0 for f in features]
-
-        plt.figure(figsize=(12, 5))
-        plt.plot(dates, ndvi_values, marker='o', linestyle='-', color='green')
-        plt.title(f"NDVI Time Series for {country_name} ({year})")
-        plt.xlabel("Date")
-        plt.ylabel("NDVI")
-        plt.grid(True)
-        plt.ylim(0, 1)
-        plt.tight_layout()
-
-        output_dir = os.path.join('static', 'charts')
-        os.makedirs(output_dir, exist_ok=True)
-        filename = f"ndvi_timeseries_{country_name}_{year}.png".replace(" ", "_")
-        filepath = os.path.join(output_dir, filename)
-        plt.savefig(filepath)
-        plt.close()
-        return f"/static/charts/{filename}"
-
-    except Exception as e:
-        print(f"Error generating time-series: {e}")
-        return None
-
-# -----------------------------
-# Bloom Time-Series Function
-# -----------------------------
-def generate_bloom_timeseries(country_name, year):
-    try:
-        if country_name == "World":
-            geometry = ee.Geometry.Polygon([[-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]])
-        else:
-            country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
-            geometry = country_fc.geometry()
-
-        col = ee.ImageCollection("MODIS/061/MOD13Q1") \
-            .filterBounds(geometry) \
-            .filterDate(f'{year}-01-01', f'{year}-12-31') \
-            .select('NDVI') \
-            .sort('system:time_start')
-
-        def compute_bloom(img):
-            date = img.date()
-            prev = ee.ImageCollection("MODIS/061/MOD13Q1") \
-                .filterDate(date.advance(-16, 'day').format('YYYY-MM-dd'), date.advance(-1, 'day').format('YYYY-MM-dd')) \
+        months = list(range(1, 13))
+        def per_month(month):
+            start = ee.Date.fromYMD(year, month, 1)
+            end = start.advance(1, 'month')
+            img = ee.ImageCollection("MODIS/061/MOD13Q1") \
+                .filterDate(start, end) \
                 .select('NDVI') \
                 .mean()
-            bloom = img.subtract(prev)
-            mean_dict = bloom.reduceRegion(
-                reducer=ee.Reducer.mean(),
-                geometry=geometry,
-                scale=500,
-                maxPixels=1e13
-            )
+            prev_img = ee.ImageCollection("MODIS/061/MOD13Q1") \
+                .filterDate(start.advance(-1, 'month'), start) \
+                .select('NDVI') \
+                .mean()
+            if kind == "NDVI":
+                val = img.reduceRegion(ee.Reducer.mean(), geometry, 1000, maxPixels=1e13).get('NDVI')
+            else:
+                bloom = img.subtract(prev_img)
+                val = bloom.reduceRegion(ee.Reducer.mean(), geometry, 1000, maxPixels=1e13).get('NDVI')
             return ee.Feature(None, {
-                'date': date.format('YYYY-MM-dd'),
-                'Bloom': mean_dict.get('NDVI')
+                'date': start.format('YYYY-MM'),
+                kind: val
             })
-
-        features = col.map(compute_bloom).filter(ee.Filter.notNull(['Bloom'])).getInfo()['features']
-        dates = [datetime.strptime(f['properties']['date'], '%Y-%m-%d') for f in features]
-        bloom_values = [f['properties']['Bloom'] / 10000.0 if f['properties']['Bloom'] is not None else None for f in features]
+        features = ee.FeatureCollection(ee.List(months).map(lambda m: per_month(ee.Number(m))))
+        features = features.filter(ee.Filter.notNull([kind])).getInfo()['features']
+        dates = [datetime.strptime(f['properties']['date'], '%Y-%m') for f in features]
+        values = [f['properties'][kind] / 10000.0 if f['properties'][kind] is not None else None for f in features]
 
         plt.figure(figsize=(12, 5))
-        plt.plot(dates, bloom_values, marker='o', linestyle='-', color='purple')
-        plt.title(f"Bloom Time Series for {country_name} ({year})")
-        plt.xlabel("Date")
-        plt.ylabel("Bloom (NDVI difference)")
+        plt.plot(dates, values, marker='o', linestyle='-', color='green' if kind == "NDVI" else 'purple')
+        plt.title(f"{kind} Monthly Time Series for {country_name} ({year})")
+        plt.xlabel("Month")
+        plt.ylabel(kind)
         plt.grid(True)
         plt.tight_layout()
-
         output_dir = os.path.join('static', 'charts')
         os.makedirs(output_dir, exist_ok=True)
-        filename = f"bloom_timeseries_{country_name}_{year}.png".replace(" ", "_")
+        filename = f"{kind.lower()}_monthly_timeseries_{country_name}_{year}.png".replace(" ", "_")
         filepath = os.path.join(output_dir, filename)
         plt.savefig(filepath)
         plt.close()
         return f"/static/charts/{filename}"
-
     except Exception as e:
-        print(f"Error generating bloom time-series: {e}")
+        print(f"Error generating {kind} monthly time-series: {e}")
         return None
 
 # -----------------------------
@@ -315,8 +257,8 @@ def index():
     except Exception as e:
         ndvi_map = f"<h3>Error generating map: {str(e)}</h3>"
 
-    timeseries_url = generate_ndvi_timeseries(selected_country, selected_years[0]) if selected_years else None
-    bloom_timeseries_url = generate_bloom_timeseries(selected_country, selected_years[0]) if (show_bloom_graph and selected_years) else None
+    timeseries_url = generate_monthly_timeseries(selected_country, int(selected_years[0]), kind="NDVI") if selected_years else None
+    bloom_timeseries_url = generate_monthly_timeseries(selected_country, int(selected_years[0]), kind="Bloom") if (show_bloom_graph and selected_years) else None
 
     return render_template(
         'index.html',
