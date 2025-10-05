@@ -25,65 +25,27 @@ countries_fc = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
 all_countries = sorted(countries_fc.aggregate_array('country_na').getInfo())
 
 
-def get_ndvi_and_bloom_map(country_name, years, show_ndvi=True, show_bloom=True):
+def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bloom=True,
+                           use_reduce_resolution=True, proj_scale=500, zoom_start=4, center=[20,0]):
     try:
-        latest_year = int(years[-1])
-        prev_year = latest_year - 1
-
-        if country_name == "World":
-            geometry = ee.Geometry.Rectangle([-180, -90, 180, 90])
-            center = [20, 0]
-            zoom_start = 2
-            proj_scale = 20000
-            country_fc = None
-            use_reduce_resolution = False
-        else:
-            country_fc = countries_fc.filter(ee.Filter.Or(
-                ee.Filter.eq('country_na', country_name),
-                ee.Filter.eq('ADMIN', country_name)
-            ))
-            country = country_fc.first()
-            if not country:
-                raise Exception(f"Country '{country_name}' not found in FeatureCollection.")
-            geometry = country.geometry()
-            centroid = geometry.centroid().getInfo()['coordinates']
-            center = [centroid[1], centroid[0]]
-            zoom_start = 5
-            proj_scale = 500
-            use_reduce_resolution = True
-
-
-        ndvi_collection = ee.ImageCollection("MODIS/061/MOD13Q1") \
-            .filterBounds(geometry) \
-            .filterDate(f'{latest_year}-01-01', f'{latest_year}-12-31') \
-            .select('NDVI')
-        ndvi_image = ndvi_collection.mean()
-
-        if country_name != "World":
-            ndvi_image = ndvi_image.clip(geometry)
-
-        ndvi_current = ee.ImageCollection("MODIS/061/MOD13Q1") \
-            .filterBounds(geometry) \
-            .filterDate(f'{latest_year}-01-01', f'{latest_year}-12-31') \
+        # Example: get NDVI images for selected years
+        ndvi_current = ee.ImageCollection('MODIS/006/MOD13Q1') \
+            .filter(ee.Filter.calendarRange(selected_years[-1], selected_years[-1], 'year')) \
             .select('NDVI').mean()
-
-        ndvi_prev = ee.ImageCollection("MODIS/061/MOD13Q1") \
-            .filterBounds(geometry) \
-            .filterDate(f'{prev_year}-01-01', f'{prev_year}-12-31') \
+        ndvi_prev = ee.ImageCollection('MODIS/006/MOD13Q1') \
+            .filter(ee.Filter.calendarRange(selected_years[0], selected_years[0], 'year')) \
             .select('NDVI').mean()
+        ndvi_image = ndvi_current
 
         bloom_diff = ndvi_current.subtract(ndvi_prev).setDefaultProjection(crs='EPSG:4326', scale=proj_scale)
 
+        # Generate bloom mask
         if use_reduce_resolution:
             bloom_mask = bloom_diff.updateMask(bloom_diff.gt(50)) \
                 .reduceResolution(reducer=ee.Reducer.mean(), maxPixels=1024) \
-                .reproject(crs='EPSG:4326', scale=proj_scale) \
-                .clip(geometry)
+                .reproject(crs='EPSG:4326', scale=proj_scale)
         else:
             bloom_mask = bloom_diff.updateMask(bloom_diff.gt(50))
-
-        if country_name != "World":
-            bloom_mask = bloom_mask.clip(geometry)
 
         ndvi_vis = {
             'min': 0,
@@ -96,8 +58,10 @@ def get_ndvi_and_bloom_map(country_name, years, show_ndvi=True, show_bloom=True)
             'palette': ['#ffb6c1', '#ff69b4', '#ff00ff', '#800080']
         }
 
+        # Initialize map
         m = folium.Map(location=center, zoom_start=zoom_start, tiles='OpenStreetMap', control_scale=True)
 
+        # Add NDVI layer
         if show_ndvi:
             ndvi_mapid = ndvi_image.getMapId(ndvi_vis)
             folium.TileLayer(
@@ -108,6 +72,7 @@ def get_ndvi_and_bloom_map(country_name, years, show_ndvi=True, show_bloom=True)
                 control=True
             ).add_to(m)
 
+        # Add Bloom layer
         if show_bloom:
             bloom_mapid = bloom_mask.getMapId(bloom_vis)
             folium.TileLayer(
@@ -118,23 +83,35 @@ def get_ndvi_and_bloom_map(country_name, years, show_ndvi=True, show_bloom=True)
                 control=True
             ).add_to(m)
 
+        # Country borders
         if country_name == "World":
+            # Use tiles instead of getInfo() for performance
+            world_mapid = countries_fc.getMapId()
             folium.TileLayer(
-                tiles=countries_fc.getMapId()['tile_fetcher'].url_format,
-                name='Country Borders',
+                tiles=world_mapid['tile_fetcher'].url_format,
+                attr='Country Borders',
+                name='Countries',
                 overlay=True,
                 control=True
             ).add_to(m)
-
         else:
+            # Filter specific country
+            country_fc = countries_fc.filter(ee.Filter.eq('name', country_name))
+            country_mapid = country_fc.getMapId()
             folium.TileLayer(
-                tiles=bloom_mask.getMapId(bloom_vis)['tile_fetcher'].url_format,
-                attr='MODIS Bloom',
-                name='Bloom',
+                tiles=country_mapid['tile_fetcher'].url_format,
+                attr=f'{country_name} Borders',
+                name=f'{country_name}',
                 overlay=True,
                 control=True
             ).add_to(m)
 
+            # Fit bounds to country geometry
+            geometry = country_fc.geometry()
+            bounds = geometry.bounds().getInfo()['coordinates'][0]
+            m.fit_bounds([[b[1], b[0]] for b in bounds])
+
+        # Add controls
         Fullscreen().add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
 
