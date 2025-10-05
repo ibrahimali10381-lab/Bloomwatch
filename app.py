@@ -24,9 +24,16 @@ ee.Initialize(credentials)
 countries_fc = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
 all_countries = ["World"] + sorted(countries_fc.aggregate_array('country_na').getInfo())
 
-def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bloom=True,
-                           proj_scale=500, zoom_start=3, center=[20,0], use_reduce_resolution=False):
-
+def get_ndvi_and_bloom_map(
+    country_name,
+    selected_years,
+    show_ndvi=True,
+    show_bloom=True,
+    proj_scale=500,
+    zoom_start=3,
+    center=[20, 0],
+    use_reduce_resolution=False
+):
     try:
         # Ensure selected_years is a list of valid ints, fallback to [2023]
         selected_years = [y for y in selected_years if str(y).isdigit()]
@@ -36,16 +43,33 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
             selected_years = [int(y) for y in selected_years]
         last_year = int(selected_years[-1])
 
-        ndvi_current = ee.ImageCollection('MODIS/006/MOD13Q1') \
-            .filter(ee.Filter.calendarRange(last_year, last_year, 'year')) \
-            .select('NDVI').mean()
+        # If "World" is selected, default to an empty geometry (will not mask anything)
+        if country_name == "World":
+            country_geom = None
+        else:
+            country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
+            # Make a single geometry (may be multipolygon)
+            country_geom = country_fc.geometry()
 
-        ndvi_prev = ee.ImageCollection('MODIS/006/MOD13Q1') \
+        ndvi_collection = ee.ImageCollection('MODIS/006/MOD13Q1') \
+            .filter(ee.Filter.calendarRange(last_year, last_year, 'year')) \
+            .select('NDVI')
+        ndvi_prev_collection = ee.ImageCollection('MODIS/006/MOD13Q1') \
             .filter(ee.Filter.calendarRange(last_year-1, last_year-1, 'year')) \
-            .select('NDVI').mean()
+            .select('NDVI')
+
+        ndvi_current = ndvi_collection.mean()
+        ndvi_prev = ndvi_prev_collection.mean()
+
+        # Mask to selected country if not "World"
+        if country_name != "World" and country_geom is not None:
+            ndvi_current = ndvi_current.clip(country_geom)
+            ndvi_prev = ndvi_prev.clip(country_geom)
 
         # Bloom difference
         bloom_diff = ndvi_current.subtract(ndvi_prev).setDefaultProjection(crs='EPSG:4326', scale=proj_scale)
+        if country_name != "World" and country_geom is not None:
+            bloom_diff = bloom_diff.clip(country_geom)
 
         if use_reduce_resolution:
             bloom_mask = bloom_diff.updateMask(bloom_diff.gt(50)) \
@@ -65,7 +89,14 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
             'palette': ['#ffb6c1', '#ff69b4', '#ff00ff', '#800080']
         }
 
-        m = folium.Map(location=center, zoom_start=zoom_start, tiles='OpenStreetMap', control_scale=True)
+        m = folium.Map(location=center, zoom_start=zoom_start, tiles=None, control_scale=True)
+        folium.TileLayer(
+            tiles="https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}{r}.png",
+            attr="&copy; OpenStreetMap contributors &copy; CARTO",
+            name="CartoDB Positron No Labels",
+            overlay=False,
+            control=True,
+        ).add_to(m)
 
         if show_ndvi:
             ndvi_mapid = ndvi_current.getMapId(ndvi_vis)
@@ -87,17 +118,17 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
                 control=True
             ).add_to(m)
 
-        # Borders have been removed as requested!
+        # Fit to country bounds if not World
+        if country_name != "World" and country_geom is not None:
+            bounds = country_geom.bounds().getInfo()['coordinates'][0]
+            m.fit_bounds([[b[1], b[0]] for b in bounds])
 
         Fullscreen().add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
-
         return m.get_root().render()
 
     except Exception as e:
         return f"<h3>Error generating map for {country_name}: {str(e)}</h3>"
-
-
 
 app = Flask(__name__)
 
@@ -130,7 +161,6 @@ def index():
         show_ndvi=show_ndvi,
         show_bloom=show_bloom
     )
-
 
 if __name__ == "__main__":
     app.run(debug=True)
