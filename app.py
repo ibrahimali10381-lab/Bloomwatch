@@ -120,21 +120,19 @@ def get_ndvi_and_bloom_map(country_name, years, show_ndvi=True, show_bloom=True)
 
         if country_name == "World":
             selected_country_fc = countries_fc.filter(ee.Filter.eq('name', selected_country))
-            for country in countries:
-                if 'geometry' in country and country['geometry'] is not None:
-                    folium.GeoJson(
-                        data=country,
-                        name=country['properties']['country_na'],
-                        style_function=lambda f: {'fill': False, 'color': 'red', 'weight': 1}
-                    ).add_to(m)
-        else:
             folium.GeoJson(
-                data=country_fc.getInfo(),
-                name='Country Borders',
-                style_function=lambda f: {'fill': False, 'color': 'red', 'weight': 2}
+                data=ee.FeatureCollection(selected_country_fc).getMapId()['tile_fetcher'].url_format,
+                name=selected_country,
+                style_function=lambda f: {'fill': False, 'color': 'red', 'weight': 1}
             ).add_to(m)
-            bounds = geometry.bounds().getInfo()['coordinates'][0]
-            m.fit_bounds([[b[1], b[0]] for b in bounds])
+        else:
+            folium.TileLayer(
+                tiles=bloom_mask.getMapId(bloom_vis)['tile_fetcher'].url_format,
+                attr='MODIS Bloom',
+                name='Bloom',
+                overlay=True,
+                control=True
+            ).add_to(m)
 
         Fullscreen().add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
