@@ -29,6 +29,8 @@ html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; overflow: 
 @keyframes spin { 100% { transform: rotate(360deg); } }
 .select2-container--default .select2-selection--single,
 .select2-container--default .select2-selection--multiple { background-color: rgba(255,255,255,0.9); color: black; border-radius: 4px; }
+#timeseries-container { position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.95); z-index: 10000; border-radius: 8px; padding: 15px; box-shadow: 0 0 12px rgba(0,0,0,0.25); }
+#timeseries-container img { max-width: 350px; }
 </style>
 
 <div id="particles-js"></div>
@@ -83,6 +85,13 @@ html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; overflow: 
     </div>
     {% endif %}
 </div>
+
+{% if timeseries_url %}
+<div id="timeseries-container">
+    <b>NDVI Time Series</b><br>
+    <img src="{{ timeseries_url }}" alt="NDVI Time Series">
+</div>
+{% endif %}
 
 <div id="loading-overlay">
     <div class="spinner"></div>
