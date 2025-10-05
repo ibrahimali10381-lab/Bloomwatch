@@ -14,10 +14,13 @@ from datetime import datetime
 # Earth Engine Initialization (Fixed)
 # -----------------------------
 SERVICE_ACCOUNT = "earth-engine-user@bloomwatch-474023.iam.gserviceaccount.com"
-KEY_FILE = "bloomwatch-474023-83c209d61837.json"
+KEY_JSON = os.environ.get("EE_KEY_JSON")
+if not KEY_JSON:
+    raise ValueError("EE_KEY_JSON environment variable is not set.")
 
-if not os.path.exists(KEY_FILE):
-    raise FileNotFoundError(f"Key file not found: {KEY_FILE}")
+with tempfile.NamedTemporaryFile(mode="w+", delete=False) as f:
+    f.write(KEY_JSON)
+    KEY_FILE = f.name
 
 credentials = ee.ServiceAccountCredentials(SERVICE_ACCOUNT, KEY_FILE)
 ee.Initialize(credentials)
