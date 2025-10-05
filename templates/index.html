@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Bloomwatch NDVI Viewer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
+</head>
+<body>
+<style>
+html, body { height: 100%; margin: 0; font-family: Arial, sans-serif; overflow: hidden; }
+#particles-js { position: fixed; width: 100%; height: 100%; z-index: 0; }
+#map { width: 100%; height: 100%; position: relative; z-index: 1; opacity: 0.95; }
+#controls { position: absolute; top: 20px; left: 20px; z-index: 2; width: 300px; background: rgba(0,0,0,0.6); color: white; padding: 20px; border-radius: 8px; box-shadow: 0 0 12px rgba(0,0,0,0.5); max-height: 90%; overflow-y: auto; }
+#controls label { display: block; margin-top: 10px; font-weight: bold; }
+#controls button { margin-top: 12px; background-color: #4CAF50; color: white; border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; }
+#controls button:hover { background-color: #45a049; }
+#legends-container { position: absolute; bottom: 20px; right: 20px; display: flex; gap: 20px; z-index: 9999; }
+.legend-box { background: rgba(255,255,255,0.9); color: #000; padding: 10px; border-radius: 8px; font-size: 13px; min-width: 150px; }
+.legend-box b { display: block; margin-bottom: 6px; }
+.legend-box i { width: 15px; height: 15px; display: inline-block; margin-right: 5px; border-radius: 2px; }
+#loading-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: none; align-items: center; justify-content: center; z-index: 3; color: white; font-size: 18px; flex-direction: column; }
+.spinner { border: 6px solid #f3f3f3; border-top: 6px solid #4CAF50; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin-bottom: 10px; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.select2-container--default .select2-selection--single,
+.select2-container--default .select2-selection--multiple { background-color: rgba(255,255,255,0.9); color: black; border-radius: 4px; }
+</style>
+
+<div id="particles-js"></div>
+
+<div id="controls">
+<form id="ndvi-form" method="POST">
+    <label for="country">Country:</label>
+    <select id="country" name="country" style="width: 100%;">
+        <option value="World" {% if selected_country == 'World' %}selected{% endif %}>World</option>
+        {% for c in countries %}
+            <option value="{{ c }}" {% if c == selected_country %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+    </select>
+
+    <label for="year">Year(s):</label>
+    <select id="year" name="year" multiple="multiple" style="width: 100%;">
+        {% for y in range(2005, 2024) %}
+            <option value="{{ y }}" {% if y|string in selected_years %}selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+    </select>
+
+    <br><br>
+    <div>
+        <label><input type="checkbox" name="show_ndvi" {% if show_ndvi %}checked{% endif %}> Show NDVI</label>
+        <label style="margin-left:20px;"><input type="checkbox" name="show_bloom" {% if show_bloom %}checked{% endif %}> Show Bloom</label>
+    </div>
+
+    <br>
+    <button type="submit">Update Map</button>
+</form>
+</div>
+
+<div id="legends-container">
+    {% if show_ndvi %}
+    <div class="legend-box" id="ndvi-legend">
+        <b>NDVI Legend</b>
+        <div><i style="background:#ff0000;"></i> Very Low Vegetation</div>
+        <div><i style="background:#ff7f00;"></i> Low Vegetation</div>
+        <div><i style="background:#ffff00;"></i> Moderate Vegetation</div>
+        <div><i style="background:#00ff00;"></i> Healthy Vegetation</div>
+        <div><i style="background:#006600;"></i> Dense Vegetation</div>
+    </div>
+    {% endif %}
+
+    {% if show_bloom %}
+    <div class="legend-box" id="bloom-legend">
+        <b>Bloom Legend</b>
+        <div><i style="background:#ffb6c1;"></i> Low Bloom</div>
+        <div><i style="background:#ff69b4;"></i> Moderate Bloom</div>
+        <div><i style="background:#ff00ff;"></i> High Bloom</div>
+        <div><i style="background:#800080;"></i> Very High Bloom</div>
+    </div>
+    {% endif %}
+</div>
+
+<div id="loading-overlay">
+    <div class="spinner"></div>
+    Loading NDVI map… please wait
+</div>
+
+<div id="map">{{ map | safe }}</div>
+
+<script>
+$('#country').select2({ placeholder: "Select a country", allowClear: true });
+$('#year').select2({ placeholder: "Select year(s)", allowClear: true, maximumSelectionLength: 5 });
+
+$(document).ready(function() {
+    const foliumMap = Object.values(window).find(v => v instanceof L.Map);
+
+    $('#ndvi-form').on('submit', function() {
+        $('#loading-overlay').show();
+    });
+
+    function resizeMap() { $('#map').height($(window).height()); }
+    $(window).resize(resizeMap);
+    resizeMap();
+
+    particlesJS("particles-js", {
+        "particles": {
+            "number": { "value": 120, "density": { "enable": true, "value_area": 800 } },
+            "color": { "value": "#ffffff" },
+            "shape": { "type": "circle" },
+            "opacity": { "value": 0.6, "random": true },
+            "size": { "value": 2, "random": true },
+            "line_linked": { "enable": false },
+            "move": { "enable": true, "speed": 0.3, "random": true, "out_mode": "out" }
+        },
+        "interactivity": { "events": { "resize": true } },
+        "retina_detect": true
+    });
+});
+</script>
+</body>
+</html>

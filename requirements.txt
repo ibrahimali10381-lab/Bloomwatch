@@ -1,0 +1,4 @@
+Flask==2.3.4
+folium==0.14.0
+earthengine-api==0.1.313
+gunicorn==20.1.0
