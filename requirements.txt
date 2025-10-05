@@ -3,4 +3,3 @@ folium>=0.14.0
 earthengine-api>=0.1.323
 requests>=2.31.0
 gunicorn>=21.2.0
-json
