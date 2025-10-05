@@ -2,6 +2,7 @@ import os
 import json
 import ee
 import tempfile
+import folium
 from flask import Flask, render_template, request, redirect, url_for, session
 
 
