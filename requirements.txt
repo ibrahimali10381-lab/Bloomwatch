@@ -1,4 +1,5 @@
-Flask==2.3.4
-folium==0.14.0
-earthengine-api==0.1.313
-gunicorn==20.1.0
+Flask>=2.3.0,<2.4
+folium>=0.14.0
+earthengine-api>=0.1.323
+requests>=2.31.0
+gunicorn>=21.2.0
