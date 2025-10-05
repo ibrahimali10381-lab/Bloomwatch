@@ -26,7 +26,6 @@ ee.Initialize(credentials)
 countries_fc = ee.FeatureCollection('USDOS/LSIB_SIMPLE/2017')
 all_countries = ["World"] + sorted(countries_fc.aggregate_array('country_na').getInfo())
 
-# NDVI + Bloom Map Function
 def get_ndvi_and_bloom_map(
     country_name,
     selected_years,
@@ -140,7 +139,8 @@ def get_ndvi_and_bloom_map(
 def generate_monthly_timeseries(country_name, year, kind="NDVI"):
     try:
         if country_name == "World":
-            geometry = ee.Geometry.Polygon([[-180, -90], [-180, 90], [180, 90], [180, -90], [-180, -90]])
+            # Don't plot a graph for World, return None
+            return None
         else:
             country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
             geometry = country_fc.geometry()
@@ -171,6 +171,9 @@ def generate_monthly_timeseries(country_name, year, kind="NDVI"):
         dates = [datetime.strptime(f['properties']['date'], '%Y-%m') for f in features]
         values = [f['properties'][kind] / 10000.0 if f['properties'][kind] is not None else None for f in features]
 
+        if not any(values):
+            return None
+
         plt.figure(figsize=(12, 5))
         plt.plot(dates, values, marker='o', linestyle='-', color='green' if kind == "NDVI" else 'purple')
         plt.title(f"{kind} Monthly Time Series for {country_name} ({year})")
@@ -189,7 +192,6 @@ def generate_monthly_timeseries(country_name, year, kind="NDVI"):
         print(f"Error generating {kind} monthly time-series: {e}")
         return None
 
-# Flask App
 app = Flask(__name__)
 
 @app.route("/", methods=["GET", "POST"])
@@ -211,8 +213,11 @@ def index():
     except Exception as e:
         ndvi_map = f"<h3>Error generating map: {str(e)}</h3>"
 
-    timeseries_url = generate_monthly_timeseries(selected_country, int(selected_years[0]), kind="NDVI") if selected_years else None
-    bloom_timeseries_url = generate_monthly_timeseries(selected_country, int(selected_years[0]), kind="Bloom") if (show_bloom_graph and selected_years) else None
+    # Only show time series for countries, not for "World"
+    timeseries_url = generate_monthly_timeseries(selected_country, int(selected_years[0]), kind="NDVI") \
+        if selected_country != "World" and selected_years else None
+    bloom_timeseries_url = generate_monthly_timeseries(selected_country, int(selected_years[0]), kind="Bloom") \
+        if (show_bloom_graph and selected_country != "World" and selected_years) else None
 
     return render_template(
         'index.html',
