@@ -87,41 +87,7 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
                 control=True
             ).add_to(m)
 
-        # ------------ BORDER-ONLY FIX BELOW ------------
-        if country_name == "World":
-            styled_world = countries_fc.style(**{
-                'color': 'red',
-                'width': 2,
-                'fillColor': '00000000'  # Transparent fill
-            })
-            world_mapid = styled_world.getMapId({})
-            folium.TileLayer(
-                tiles=world_mapid['tile_fetcher'].url_format,
-                attr='Earth Engine / Country Borders',
-                name='Countries',
-                overlay=True,
-                control=True
-            ).add_to(m)
-        else:
-            country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name))
-            styled_country = country_fc.style(**{
-                'color': 'red',
-                'width': 2,
-                'fillColor': '00000000'  # Transparent fill
-            })
-            country_mapid = styled_country.getMapId({})
-            folium.TileLayer(
-                tiles=country_mapid['tile_fetcher'].url_format,
-                attr=f'{country_name} Borders',
-                name=f'{country_name}',
-                overlay=True,
-                control=True
-            ).add_to(m)
-
-            geometry = country_fc.geometry()
-            bounds = geometry.bounds().getInfo()['coordinates'][0]
-            m.fit_bounds([[b[1], b[0]] for b in bounds])
-        # ------------ END BORDER-ONLY FIX ------------
+        # Borders have been removed as requested!
 
         Fullscreen().add_to(m)
         folium.LayerControl(collapsed=False).add_to(m)
