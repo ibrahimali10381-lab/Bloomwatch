@@ -53,6 +53,7 @@ def get_ndvi_and_bloom_map(
         country_geom = None if country_name == "World" else countries_fc.filter(ee.Filter.eq('country_na', country_name)).geometry()
         country_fc = countries_fc.filter(ee.Filter.eq('country_na', country_name)) if country_name != "World" else None
 
+
         # --- MODIS NDVI (existing) ---
         ndvi_collection = ee.ImageCollection('MODIS/006/MOD13Q1') \
             .filter(ee.Filter.calendarRange(last_year, last_year, 'year')) \
