@@ -28,8 +28,17 @@ def get_ndvi_and_bloom_map(country_name, selected_years, show_ndvi=True, show_bl
                            proj_scale=500, zoom_start=3, center=[20,0], use_reduce_resolution=False):
 
     try:
-        selected_years = [int(y) for y in selected_years]
-        last_year = selected_years[-1]
+        # Ensure selected_years is a list of valid ints, fallback to [2023]
+        selected_years = [y for y in selected_years if str(y).isdigit()]
+        if not selected_years:
+            selected_years = [2023]
+        else:
+            selected_years = [int(y) for y in selected_years]
+        last_year = int(selected_years[-1])
+
+        # Debug: print types
+        # print("selected_years (final):", selected_years, [type(y) for y in selected_years])
+        # print("last_year:", last_year, type(last_year))
 
         ndvi_current = ee.ImageCollection('MODIS/006/MOD13Q1') \
             .filter(ee.Filter.calendarRange(last_year, last_year, 'year')) \
@@ -125,10 +134,10 @@ def index():
     show_ndvi = 'show_ndvi' in request.form
     show_bloom = 'show_bloom' in request.form
 
-    # FIX: Remove empty string years, fallback to 2023
-    selected_years = [y for y in selected_years if y != ""]
+    # Remove empty or non-numeric years, fallback to 2023
+    selected_years = [y for y in selected_years if str(y).isdigit()]
     if not selected_years:
-        selected_years = ['2023']
+        selected_years = [2023]
 
     years = list(range(2005, 2024))
 
@@ -142,7 +151,7 @@ def index():
         map=ndvi_map,
         countries=all_countries,
         selected_country=selected_country,
-        selected_years=selected_years,
+        selected_years=[str(y) for y in selected_years],
         years=years,
         show_ndvi=show_ndvi,
         show_bloom=show_bloom
