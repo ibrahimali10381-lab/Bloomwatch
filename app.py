@@ -118,8 +118,23 @@ def get_ndvi_and_bloom_map(
                 control=True
             ).add_to(m)
 
-        # Fit to country bounds if not World
+        # Draw border for the selected country and zoom to it
         if country_name != "World" and country_geom is not None:
+            # Style only the border, not fill
+            styled_country = country_fc.style(**{
+                'color': 'red',
+                'width': 3,
+                'fillColor': '00000000'  # Transparent fill
+            })
+            country_mapid = styled_country.getMapId({})
+            folium.TileLayer(
+                tiles=country_mapid['tile_fetcher'].url_format,
+                attr=f'{country_name} Borders',
+                name=f'{country_name} Border',
+                overlay=True,
+                control=True
+            ).add_to(m)
+
             bounds = country_geom.bounds().getInfo()['coordinates'][0]
             m.fit_bounds([[b[1], b[0]] for b in bounds])
 
