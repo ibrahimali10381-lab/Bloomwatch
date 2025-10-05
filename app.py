@@ -67,7 +67,7 @@ def get_ndvi_and_bloom_map(
             ndvi_current = ndvi_current.clip(country_geom)
             ndvi_prev = ndvi_prev.clip(country_geom)
 
-        modis_bloom_diff = ndvi_current.subtract(ndvi_prev).clip(country_geometry)
+        modis_bloom_diff = ndvi_current.subtract(ndvi_prev).clip(country_geom)
         if country_geom:
             modis_bloom_diff = modis_bloom_diff.clip(country_geom)
         if use_reduce_resolution:
