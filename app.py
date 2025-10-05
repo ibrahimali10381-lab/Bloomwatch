@@ -84,15 +84,15 @@ all_countries = sorted(countries_fc.aggregate_array('country_na').getInfo())
 
         # Country borders
         if country_name == "World":
-            # Use tiles instead of getInfo() for performance
-            world_mapid = countries_fc.getMapId()
+            # Use getMapId with attribution
+            world_mapid = countries_fc.getMapId({'color': 'red'})
             folium.TileLayer(
-                tiles=world_mapid['tile_fetcher'].url_format,
-                attr='Country Borders',
-                name='Countries',
-                overlay=True,
-                control=True
-            ).add_to(m)
+            tiles=world_mapid['tile_fetcher'].url_format,
+            attr='Earth Engine / Country Borders',  # <-- mandatory
+            name='Countries',
+            overlay=True,
+            control=True
+        ).add_to(m)
         else:
             # Filter specific country
             country_fc = countries_fc.filter(ee.Filter.eq('name', country_name))
