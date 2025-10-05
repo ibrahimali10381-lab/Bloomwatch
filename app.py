@@ -119,12 +119,13 @@ def get_ndvi_and_bloom_map(country_name, years, show_ndvi=True, show_bloom=True)
             ).add_to(m)
 
         if country_name == "World":
-            selected_country_fc = countries_fc.filter(ee.Filter.eq('name', selected_country))
-            folium.GeoJson(
-                data=ee.FeatureCollection(selected_country_fc).getMapId()['tile_fetcher'].url_format,
-                name=selected_country,
-                style_function=lambda f: {'fill': False, 'color': 'red', 'weight': 1}
+            folium.TileLayer(
+                tiles=countries_fc.getMapId()['tile_fetcher'].url_format,
+                name='Country Borders',
+                overlay=True,
+                control=True
             ).add_to(m)
+
         else:
             folium.TileLayer(
                 tiles=bloom_mask.getMapId(bloom_vis)['tile_fetcher'].url_format,
